@@ -1,7 +1,12 @@
 import 'dotenv/config'; // env variables load first
 import express from 'express';
 import cors from 'cors';
-import { stripeWebhook } from './src/routes/payments.routes.js';
+import paymentsRoutes, { stripeWebhook } from './src/routes/payments.routes.js';
+import servicesRoutes from './src/routes/services.routes.js';
+import bookingsRoutes from './src/routes/bookings.routes.js';
+import usersRoutes from './src/routes/users.routes.js';
+import adminRoutes from './src/routes/admin.routes.js';
+import statsRoutes from './src/routes/stats.routes.js';
 
 const app = express();
 
@@ -16,6 +21,14 @@ app.use(express.json());
 
 // Health check route
 app.get('/', (req, res) => res.send('FixMate server is running'));
+
+// Every API route the client calls
+app.use('/api/services', servicesRoutes);
+app.use('/api/bookings', bookingsRoutes);
+app.use('/api/users', usersRoutes);
+app.use('/api/admin', adminRoutes);
+app.use('/api/payments', paymentsRoutes);
+app.use('/api/stats', statsRoutes);
 
 // 404 handler: no route matched
 app.use((req, res) => res.status(404).send({ message: 'Route not found' }));
