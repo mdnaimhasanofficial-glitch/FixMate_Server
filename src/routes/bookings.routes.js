@@ -114,6 +114,8 @@ router.patch('/:id/status', verifyToken, verifyTechnician, async (req, res) => {
   const { id } = req.params;
   const { status, finalAmount } = req.body;
   if (!ObjectId.isValid(id)) return res.status(404).send({ message: 'Booking not found' });
+  // status is required
+  if (!status) return res.status(400).send({ message: 'Status is required' });
   const { bookings } = await getCollections();
   // শুধু নিজের job খুঁজবে, অন্যের job হলে "পাওয়া যায় না"
   const booking = await bookings.findOne({ _id: new ObjectId(id), technicianEmail: req.user.email });
