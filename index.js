@@ -11,7 +11,9 @@ import statsRoutes from './src/routes/stats.routes.js';
 const app = express();
 
 // CORS: allow only the client app and local dev server
-app.use(cors({ origin: [process.env.CLIENT_URL, 'http://localhost:3000'] }));
+// (filter(Boolean) removes an empty CLIENT_URL so this can never crash the server)
+const allowedOrigins = [process.env.CLIENT_URL, 'http://localhost:3000'].filter(Boolean);
+app.use(cors({ origin: allowedOrigins }));
 
 // Stripe webhook needs the raw body, so it is registered BEFORE express.json()
 app.post('/api/payments/webhook', express.raw({ type: 'application/json' }), stripeWebhook);
