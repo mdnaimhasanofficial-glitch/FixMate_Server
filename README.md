@@ -70,8 +70,8 @@ status) and 1 payment. Seeded docs are marked with `seeded: true`.
 | GET | `/api/admin/bookings` | admin | all bookings (`?status=`) |
 | GET | `/api/admin/payments` | admin | payments + totalRevenue |
 
-> **Note:** the route files are ready but still need to be mounted in `index.js`
-> (`app.use('/api/services', servicesRoutes)` and so on). Until then they return 404.
+> **Note:** every route file is mounted in `index.js`
+> (`app.use('/api/services', servicesRoutes)` and so on), so all of the routes below work.
 
 ### Status pipeline
 
@@ -101,4 +101,29 @@ src/seed.js              demo data (npm run seed)
 The app exports `default app` and only calls `app.listen()` when `VERCEL` is not set,
 so the same code runs locally and on Vercel.
 
-Stripe webhook URL for production: `https://<your-domain>/api/payments/webhook`
+### Vercel environment variables
+
+`vercel` CLI দিয়ে deploy করলে বা Dashboard → Project → Settings → Environment Variables থেকে
+সেট করতে হবে (`.env` ফাইল Vercel-এ যায় না):
+
+| Key | Value |
+| --- | --- |
+| `MONGODB_URI` | same MongoDB connection string as local |
+| `DB_NAME` | e.g. `fixmate` |
+| `JWT_SECRET` | **exactly the same** value as the client project's `JWT_SECRET` |
+| `STRIPE_SECRET_KEY` | Stripe test secret key |
+| `STRIPE_WEBHOOK_SECRET` | `whsec_...` signing secret of the production webhook |
+| `CLIENT_URL` | the frontend URL, e.g. `https://your-client.vercel.app` |
+
+> `JWT_SECRET` দুই project-এ আলাদা হলে সব API request 401 দেবে — একই value রাখতে হবে।
+
+### Stripe webhook setup (production)
+
+1. Deploy this server first, note the URL: `https://your-server.vercel.app`
+2. Stripe Dashboard → **Developers → Webhooks → Add endpoint**
+   - URL: `https://your-server.vercel.app/api/payments/webhook`
+   - Events: `checkout.session.completed`
+3. Copy the **Signing secret** (`whsec_...`) into the Vercel env var
+   `STRIPE_WEBHOOK_SECRET`
+4. Local testing: `stripe listen --forward-to localhost:5000/api/payments/webhook`
+   (Stripe CLI prints its own `whsec_...` for local use)

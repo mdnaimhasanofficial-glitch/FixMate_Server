@@ -72,12 +72,29 @@ export default router;
 // ৪) Webhook: Stripe নিজে থেকে পাঠায়। index.js-এ express.raw দিয়ে বসানো আছে,
 // তাই এখানে raw body আর signature verify করা যায়
 export async function stripeWebhook(req, res) {
+  // Webhook secret না থাকলে আগেই স্পষ্ট error দাও (নাহলে signature error দেখাবে)
+  const secret = process.env.STRIPE_WEBHOOK_SECRET;
+  if (!secret || secret === 'whsec_xxx') {
+    return res.status(500).send({ message: 'STRIPE_WEBHOOK_SECRET is not set' });
+  }
+  // Signature verify করতে হুবহু raw bytes লাগে।
+  // Local-এ express.raw Buffer দেয়, Vercel কিছু ক্ষেত্রে string বা parsed JSON দিতে পারে
+  let payload;
+  if (Buffer.isBuffer(req.body)) {
+    payload = req.body;
+  } else if (req.rawBody) {
+    payload = Buffer.from(req.rawBody);
+  } else if (typeof req.body === 'string') {
+    payload = Buffer.from(req.body, 'utf8');
+  } else {
+    payload = Buffer.from(JSON.stringify(req.body ?? {}));
+  }
   let event;
   try {
     event = stripe.webhooks.constructEvent(
-      req.body, // raw body
+      payload, // raw body
       req.headers['stripe-signature'],
-      process.env.STRIPE_WEBHOOK_SECRET
+      secret
     );
   } catch (error) {
     return res.status(400).send(`Webhook Error: ${error.message}`);
