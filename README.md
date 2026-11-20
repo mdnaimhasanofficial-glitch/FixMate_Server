@@ -28,6 +28,7 @@ npm run dev            # nodemon, http://localhost:5000
 | `JWT_SECRET` | Secret used to sign/verify tokens |
 | `STRIPE_SECRET_KEY` | Stripe test secret key |
 | `STRIPE_WEBHOOK_SECRET` | Stripe webhook signing secret |
+| `STRIPE_PRO_PRICE_ID` | recurring Stripe price for the Pro plan (`price_...`) |
 | `CLIENT_URL` | Frontend URL (allowed by CORS) |
 
 ## Seed data
@@ -52,7 +53,7 @@ status) and 1 payment. Seeded docs are marked with `seeded: true`.
 | PATCH | `/api/services/:id` | technician | edit own service (goes back to `pending`) |
 | PATCH | `/api/services/:id/availability` | technician | on/off availability |
 | DELETE | `/api/services/:id` | technician | delete own service |
-| POST | `/api/bookings` | customer | create repair request (duplicate active request → 409) |
+| POST | `/api/bookings` | customer | create repair request (duplicate active → 409; free plan at 5 bookings → 403 `FREE_LIMIT_REACHED`) |
 | GET | `/api/bookings/my` | customer | own bookings |
 | PATCH | `/api/bookings/:id/cancel` | customer | cancel (only when `requested`) |
 | GET | `/api/bookings/technician` | technician | own jobs (`?status=` filter) |
@@ -61,6 +62,11 @@ status) and 1 payment. Seeded docs are marked with `seeded: true`.
 | GET | `/api/payments/verify?session_id=` | customer | verify paid + save payment |
 | GET | `/api/payments/my` | customer | payment history |
 | POST | `/api/payments/webhook` | Stripe | raw body + signature (registered **before** `express.json()`) |
+| POST | `/api/subscription/create-checkout-session` | customer | start Stripe Checkout for the Pro plan |
+| GET | `/api/subscription/status` | customer | `{ plan, usedCount, remaining, limit }` (`remaining` = null for Pro) |
+| GET | `/api/subscription/verify?session_id=` | customer | verify paid session + activate Pro instantly (webhook fallback) |
+| GET | `/api/subscription/price` | public | live Pro price from Stripe (used by the pricing page) |
+| POST | `/api/stripe/webhook` | Stripe | raw body + signature; sets `plan: "pro"` on Pro checkout (registered **before** `express.json()`) |
 | GET/PATCH | `/api/users/profile` | any logged in | update name, phone, area, bio, image |
 | GET | `/api/stats` | any logged in | role based stats + chart grouped by status |
 | GET | `/api/admin/users` | admin | all users |
@@ -91,7 +97,7 @@ index.js                 app + middleware order + error handlers
 src/config/db.js         MongoDB connection + getCollections()
 src/middlewares/auth.js  verifyToken / verifyCustomer / verifyTechnician / verifyAdmin
 src/routes/*.routes.js   one file per resource
-src/utils/               statusRules.js, savePayment.js
+src/utils/               statusRules.js, savePayment.js, subscription.js
 src/seed.js              demo data (npm run seed)
 ```
 
@@ -113,6 +119,7 @@ so the same code runs locally and on Vercel.
 | `JWT_SECRET` | **exactly the same** value as the client project's `JWT_SECRET` |
 | `STRIPE_SECRET_KEY` | Stripe test secret key |
 | `STRIPE_WEBHOOK_SECRET` | `whsec_...` signing secret of the production webhook |
+| `STRIPE_PRO_PRICE_ID` | the recurring Pro plan price (`price_...`) |
 | `CLIENT_URL` | the frontend URL, e.g. `https://your-client.vercel.app` |
 
 > `JWT_SECRET` দুই project-এ আলাদা হলে সব API request 401 দেবে — একই value রাখতে হবে।
@@ -121,9 +128,25 @@ so the same code runs locally and on Vercel.
 
 1. Deploy this server first, note the URL: `https://your-server.vercel.app`
 2. Stripe Dashboard → **Developers → Webhooks → Add endpoint**
-   - URL: `https://your-server.vercel.app/api/payments/webhook`
+   - URL: `https://your-server.vercel.app/api/stripe/webhook`
    - Events: `checkout.session.completed`
 3. Copy the **Signing secret** (`whsec_...`) into the Vercel env var
    `STRIPE_WEBHOOK_SECRET`
-4. Local testing: `stripe listen --forward-to localhost:5000/api/payments/webhook`
-   (Stripe CLI prints its own `whsec_...` for local use)
+4. One endpoint handles everything: booking payments **and** Pro plan upgrades both
+   arrive at `/api/stripe/webhook` (the older `/api/payments/webhook` still works too).
+
+### Test the webhook locally (`stripe listen --forward-to`)
+
+```bash
+stripe listen --forward-to localhost:5000/api/stripe/webhook
+```
+
+1. Stripe CLI prints its **own** signing secret (`whsec_...`) — copy it into `.env` as
+   `STRIPE_WEBHOOK_SECRET` (it is different from the Dashboard secret) and restart the
+   server.
+2. Trigger a test event: `stripe trigger checkout.session.completed`
+   — the CLI log shows the event and the server answers `{"received":true}`.
+3. A wrong signature is rejected with HTTP 400 (`Webhook Error: ...`).
+4. Real end-to-end test: click **Upgrade to Pro** on `/pricing` and pay with the test
+   card `4242 4242 4242 4242`, expiry any future date, CVC any 3 digits — the webhook
+   sets `plan: "pro"` and `/payment/success` shows *Welcome to Pro!*.

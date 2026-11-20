@@ -3,6 +3,7 @@ import { ObjectId } from 'mongodb';
 import { getCollections } from '../config/db.js';
 import { verifyToken, verifyCustomer, verifyTechnician } from '../middlewares/auth.js';
 import { canChange, ACTIVE_STATUSES } from '../utils/statusRules.js';
+import { getPlanStatus } from '../utils/subscription.js';
 
 const router = Router();
 
@@ -22,6 +23,15 @@ router.post('/', verifyToken, verifyCustomer, async (req, res) => {
   today.setHours(0, 0, 0, 0);
   if (!preferredDate || new Date(preferredDate) < today) {
     return res.status(400).send({ message: 'Preferred date must be today or a future date' });
+  }
+  // FREE PLAN LIMIT: free customers stop at 5 bookings, Pro customers are unlimited.
+  // The check runs on the server only, so the frontend can never bypass it.
+  const planStatus = await getPlanStatus(req.user.email);
+  if (!planStatus.canBook) {
+    return res.status(403).send({
+      code: 'FREE_LIMIT_REACHED',
+      message: 'Upgrade to Pro to book more services',
+    });
   }
   const { services, bookings } = await getCollections();
   // Service must be approved and available

@@ -2,6 +2,7 @@ import 'dotenv/config'; // env variables load first
 import express from 'express';
 import cors from 'cors';
 import paymentsRoutes, { stripeWebhook } from './src/routes/payments.routes.js';
+import subscriptionRoutes, { stripeSubscriptionWebhook } from './src/routes/subscription.routes.js';
 import servicesRoutes from './src/routes/services.routes.js';
 import bookingsRoutes from './src/routes/bookings.routes.js';
 import usersRoutes from './src/routes/users.routes.js';
@@ -15,8 +16,9 @@ const app = express();
 const allowedOrigins = [process.env.CLIENT_URL, 'http://localhost:3000'].filter(Boolean);
 app.use(cors({ origin: allowedOrigins }));
 
-// Stripe webhook needs the raw body, so it is registered BEFORE express.json()
+// Stripe webhooks need the raw body, so they are registered BEFORE express.json()
 app.post('/api/payments/webhook', express.raw({ type: 'application/json' }), stripeWebhook);
+app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), stripeSubscriptionWebhook);
 
 // JSON parsing for every other route
 app.use(express.json());
@@ -30,6 +32,7 @@ app.use('/api/bookings', bookingsRoutes);
 app.use('/api/users', usersRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/payments', paymentsRoutes);
+app.use('/api/subscription', subscriptionRoutes);
 app.use('/api/stats', statsRoutes);
 
 // 404 handler: no route matched
