@@ -10,6 +10,10 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 // ১) LOGGED IN USER: Stripe Checkout শুরু করা (Pro plan)
 router.post('/create-checkout-session', verifyToken, async (req, res) => {
+  // Pro plan শুধু customer — technician বা admin হলে checkout শুরু করা যাবে না
+  if (req.user.role !== 'customer') {
+    return res.status(403).send({ message: 'Pro plan is only available for customers' });
+  }
   const priceId = process.env.STRIPE_PRO_PRICE_ID;
   if (!priceId) {
     return res.status(500).send({ message: 'STRIPE_PRO_PRICE_ID is not set on the server' });
@@ -175,6 +179,12 @@ async function activatePro(session) {
     }
   }
   const { users } = await getCollections();
+  // Pro শুধু customer রোলেই বসবে — technician/admin হলে কিছুই বদলাবে না
+  const user = await users.findOne({ email });
+  if (!user || (user.role || 'customer') !== 'customer') {
+    console.log(`Pro activation skipped: ${email} is not a customer`);
+    return null;
+  }
   await users.updateOne(
     { email },
     {
